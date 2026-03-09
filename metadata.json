@@ -1,0 +1,5 @@
+{
+  "name": "ArxivCast",
+  "description": "Intelligence Briefing with arXiv papers and AI-generated podcasts.",
+  "requestFramePermissions": ["microphone"]
+}
