@@ -1,4 +1,5 @@
 import axios from 'axios';
+import https from 'https';
 import { XMLParser } from 'fast-xml-parser';
 import { insertPaper } from './db.js';
 
@@ -17,7 +18,9 @@ export async function fetchFromArxiv(category: string, maxResults: number, date?
   const url = `http://export.arxiv.org/api/query?search_query=${encodeURIComponent(searchQuery)}&max_results=${maxResults}&sortBy=submittedDate&sortOrder=descending`;
   
   try {
-    const response = await axios.get(url);
+    const response = await axios.get(url, {
+      httpsAgent: new https.Agent({ rejectUnauthorized: false })
+    });
     const xml = parser.parse(response.data);
     
     let entries = xml.feed.entry;

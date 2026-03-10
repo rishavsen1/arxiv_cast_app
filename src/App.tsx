@@ -1,6 +1,161 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Search, Trash2, Play, FileAudio, RefreshCw, CheckSquare, Square, DownloadCloud, X, ChevronDown, ChevronUp, Menu, FileText, Database, MessageCircle, Send, Mic, PhoneCall, PhoneOff } from 'lucide-react';
+import { Search, Trash2, Play, FileAudio, RefreshCw, CheckSquare, Square, DownloadCloud, X, ChevronDown, ChevronUp, Menu, FileText, Database, MessageCircle, Send, Mic, PhoneCall, PhoneOff, Info } from 'lucide-react';
 import { LiveAudioSession } from './liveAudio';
+
+const SUBCATEGORY_FULL_FORMS: Record<string, string> = {
+  'cs.AI': 'Artificial Intelligence',
+  'cs.AR': 'Hardware Architecture',
+  'cs.CC': 'Computational Complexity',
+  'cs.CE': 'Computational Engineering, Finance, and Science',
+  'cs.CG': 'Computational Geometry',
+  'cs.CL': 'Computation and Language',
+  'cs.CR': 'Cryptography and Security',
+  'cs.CV': 'Computer Vision and Pattern Recognition',
+  'cs.CY': 'Computers and Society',
+  'cs.DB': 'Databases',
+  'cs.DC': 'Distributed, Parallel, and Cluster Computing',
+  'cs.DL': 'Digital Libraries',
+  'cs.DM': 'Discrete Mathematics',
+  'cs.DS': 'Data Structures and Algorithms',
+  'cs.ET': 'Emerging Technologies',
+  'cs.FL': 'Formal Languages and Automata Theory',
+  'cs.GL': 'General Literature',
+  'cs.GR': 'Graphics',
+  'cs.GT': 'Computer Science and Game Theory',
+  'cs.HC': 'Human-Computer Interaction',
+  'cs.IR': 'Information Retrieval',
+  'cs.IT': 'Information Theory',
+  'cs.LG': 'Machine Learning',
+  'cs.LO': 'Logic in Computer Science',
+  'cs.MA': 'Multiagent Systems',
+  'cs.MM': 'Multimedia',
+  'cs.MS': 'Mathematical Software',
+  'cs.NA': 'Numerical Analysis',
+  'cs.NE': 'Neural and Evolutionary Computing',
+  'cs.NI': 'Networking and Internet Architecture',
+  'cs.OS': 'Operating Systems',
+  'cs.PF': 'Performance',
+  'cs.PL': 'Programming Languages',
+  'cs.RO': 'Robotics',
+  'cs.SC': 'Symbolic Computation',
+  'cs.SD': 'Sound',
+  'cs.SE': 'Software Engineering',
+  'cs.SI': 'Social and Information Networks',
+  'cs.SY': 'Systems and Control',
+  'math.AG': 'Algebraic Geometry',
+  'math.AP': 'Analysis of PDEs',
+  'math.AT': 'Algebraic Topology',
+  'math.CA': 'Classical Analysis and ODEs',
+  'math.CO': 'Combinatorics',
+  'math.CT': 'Category Theory',
+  'math.CV': 'Complex Variables',
+  'math.DG': 'Differential Geometry',
+  'math.DS': 'Dynamical Systems',
+  'math.FA': 'Functional Analysis',
+  'math.GM': 'General Mathematics',
+  'math.GN': 'General Topology',
+  'math.GR': 'Group Theory',
+  'math.GT': 'Geometric Topology',
+  'math.HO': 'History and Overview',
+  'math.IT': 'Information Theory',
+  'math.KT': 'K-Theory and Homology',
+  'math.LO': 'Logic',
+  'math.MG': 'Metric Geometry',
+  'math.MP': 'Mathematical Physics',
+  'math.NA': 'Numerical Analysis',
+  'math.NT': 'Number Theory',
+  'math.OA': 'Operator Algebras',
+  'math.OC': 'Optimization and Control',
+  'math.PR': 'Probability',
+  'math.QA': 'Quantum Algebra',
+  'math.RA': 'Rings and Algebras',
+  'math.RT': 'Representation Theory',
+  'math.SG': 'Symplectic Geometry',
+  'math.SP': 'Spectral Theory',
+  'math.ST': 'Statistics Theory',
+  'stat.AP': 'Applications',
+  'stat.CO': 'Computation',
+  'stat.ME': 'Methodology',
+  'stat.ML': 'Machine Learning',
+  'stat.OT': 'Other Statistics',
+  'stat.TH': 'Statistics Theory',
+  'q-bio.BM': 'Biomolecules',
+  'q-bio.CB': 'Cell Behavior',
+  'q-bio.GN': 'Genomics',
+  'q-bio.MN': 'Molecular Networks',
+  'q-bio.NC': 'Neurons and Cognition',
+  'q-bio.OT': 'Other Quantitative Biology',
+  'q-bio.PE': 'Populations and Evolution',
+  'q-bio.QM': 'Quantitative Methods',
+  'q-bio.SC': 'Subcellular Processes',
+  'q-bio.TO': 'Tissues and Organs',
+  'q-fin.CP': 'Computational Finance',
+  'q-fin.EC': 'Economics',
+  'q-fin.GN': 'General Finance',
+  'q-fin.MF': 'Mathematical Finance',
+  'q-fin.PM': 'Portfolio Management',
+  'q-fin.PR': 'Pricing of Securities',
+  'q-fin.RM': 'Risk Management',
+  'q-fin.ST': 'Statistical Finance',
+  'q-fin.TR': 'Trading and Market Microstructure',
+  'eess.AS': 'Audio and Speech Processing',
+  'eess.IV': 'Image and Video Processing',
+  'eess.SP': 'Signal Processing',
+  'eess.SY': 'Systems and Control',
+  'econ.EM': 'Econometrics',
+  'econ.GN': 'General Economics',
+  'econ.TH': 'Theoretical Economics',
+  'physics.acc-ph': 'Accelerator Physics',
+  'physics.ao-ph': 'Atmospheric and Oceanic Physics',
+  'physics.app-ph': 'Applied Physics',
+  'physics.atm-clus': 'Atomic and Molecular Clusters',
+  'physics.atom-ph': 'Atomic Physics',
+  'physics.bio-ph': 'Biological Physics',
+  'physics.chem-ph': 'Chemical Physics',
+  'physics.class-ph': 'Classical Physics',
+  'physics.comp-ph': 'Computational Physics',
+  'physics.data-an': 'Data Analysis, Statistics and Probability',
+  'physics.ed-ph': 'Physics Education',
+  'physics.flu-dyn': 'Fluid Dynamics',
+  'physics.gen-ph': 'General Physics',
+  'physics.geo-ph': 'Geophysics',
+  'physics.hist-ph': 'History and Philosophy of Physics',
+  'physics.ins-det': 'Instrumentation and Detectors',
+  'physics.med-ph': 'Medical Physics',
+  'physics.optics': 'Optics',
+  'physics.pop-ph': 'Popular Physics',
+  'physics.soc-ph': 'Physics and Society',
+  'physics.space-ph': 'Space Physics',
+  'astro-ph.CO': 'Cosmology and Nongalactic Astrophysics',
+  'astro-ph.EP': 'Earth and Planetary Astrophysics',
+  'astro-ph.GA': 'Astrophysics of Galaxies',
+  'astro-ph.HE': 'High Energy Astrophysical Phenomena',
+  'astro-ph.IM': 'Instrumentation and Methods for Astrophysics',
+  'astro-ph.SR': 'Solar and Stellar Astrophysics',
+  'cond-mat.dis-nn': 'Disordered Systems and Neural Networks',
+  'cond-mat.mes-hall': 'Mesoscale and Nanoscale Physics',
+  'cond-mat.mtrl-sci': 'Materials Science',
+  'cond-mat.other': 'Other Condensed Matter',
+  'cond-mat.quant-gas': 'Quantum Gases',
+  'cond-mat.soft': 'Soft Condensed Matter',
+  'cond-mat.stat-mech': 'Statistical Mechanics',
+  'cond-mat.str-el': 'Strongly Correlated Electrons',
+  'cond-mat.supr-con': 'Superconductivity',
+  'nlin.AO': 'Adaptation and Self-Organizing Systems',
+  'nlin.CD': 'Chaotic Dynamics',
+  'nlin.CG': 'Cellular Automata and Lattice Gases',
+  'nlin.PS': 'Pattern Formation and Solitons',
+  'nlin.SI': 'Exactly Solvable and Integrable Systems',
+  'gr-qc.gr-qc': 'General Relativity and Quantum Cosmology',
+  'hep-ex.hep-ex': 'High Energy Physics - Experiment',
+  'hep-lat.hep-lat': 'High Energy Physics - Lattice',
+  'hep-ph.hep-ph': 'High Energy Physics - Phenomenology',
+  'hep-th.hep-th': 'High Energy Physics - Theory',
+  'math-ph.math-ph': 'Mathematical Physics',
+  'nucl-ex.nucl-ex': 'Nuclear Experiment',
+  'nucl-th.nucl-th': 'Nuclear Theory',
+  'quant-ph.quant-ph': 'Quantum Physics'
+};
 
 type Paper = {
   id: string;
@@ -72,6 +227,17 @@ export default function App() {
 
   const closeModal = () => {
     setModal(prev => ({ ...prev, isOpen: false }));
+  };
+
+  const getSubcategoryFullForm = (topic: string, sub: string) => {
+    const fullKey = `${topic}.${sub}`;
+    return SUBCATEGORY_FULL_FORMS[fullKey] || `Full form not available for ${fullKey}`;
+  };
+
+  const getCategorySubcategoryList = (topic: string, subjects: string[]) => {
+    return subjects
+      .map((sub) => `${sub} — ${getSubcategoryFullForm(topic, sub)}`)
+      .join('\n');
   };
 
   useEffect(() => {
@@ -362,17 +528,17 @@ export default function App() {
       {/* Modal Overlay */}
       {modal.isOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-gray-900/40 backdrop-blur-sm p-4">
-          <div className="bg-white border border-[#d5d3cb] rounded-xl shadow-2xl max-w-md w-full overflow-hidden">
-            <div className="flex justify-between items-center p-4 border-b border-[#e5e3db]">
+          <div className="bg-white border border-[#d5d3cb] rounded-xl shadow-2xl max-w-lg w-full max-h-[90vh] overflow-hidden flex flex-col">
+            <div className="flex justify-between items-center p-4 border-b border-[#e5e3db] shrink-0">
               <h3 className="text-lg font-semibold text-[#2c2c2a] font-serif">{modal.title}</h3>
               <button onClick={closeModal} className="text-[#5c5c5a] hover:text-black transition-colors">
                 <X className="w-5 h-5" />
               </button>
             </div>
-            <div className="p-6 text-[#4a4a48]">
+            <div className="p-6 text-[#4a4a48] whitespace-pre-wrap overflow-y-auto min-h-0">
               {modal.message}
             </div>
-            <div className="p-4 border-t border-[#e5e3db] flex justify-end gap-3 bg-white/50">
+            <div className="p-4 border-t border-[#e5e3db] flex justify-end gap-3 bg-white/50 shrink-0">
               {modal.type === 'confirm' && (
                 <button 
                   onClick={closeModal}
@@ -697,7 +863,18 @@ export default function App() {
                 <div className="flex flex-wrap gap-4 max-w-4xl max-h-64 overflow-y-auto pr-2 custom-scrollbar">
                   {Object.entries(categoriesTree).map(([topic, subjects]) => (
                     <div key={topic} className="space-y-1">
-                      <div className="text-xs font-bold text-[#7a7a78] uppercase">{topic}</div>
+                      <div className="text-xs font-bold text-[#7a7a78] uppercase flex items-center gap-1">
+                        <span>{topic}</span>
+                        <button
+                          type="button"
+                          onClick={() => showAlert(topic.toUpperCase(), getCategorySubcategoryList(topic, subjects))}
+                          className="text-[#7a7a78] hover:text-[#3a3a38] transition-colors"
+                          aria-label={`Show subcategories for ${topic}`}
+                          title="Show subcategory full forms"
+                        >
+                          <Info className="w-3.5 h-3.5" />
+                        </button>
+                      </div>
                       <div className="flex flex-wrap gap-2">
                         {subjects.map(sub => {
                           const cat = topic === sub ? topic : `${topic}.${sub}`;
@@ -710,7 +887,7 @@ export default function App() {
                                 checked={isSelected}
                                 onChange={() => handleCategoryToggle(cat)}
                               />
-                              {sub}
+                              <span>{sub}</span>
                             </label>
                           );
                         })}
