@@ -64,7 +64,6 @@ export default function App() {
   const [benchmarkData, setBenchmarkData] = useState<any>(null);
   const [isBenchmarking, setIsBenchmarking] = useState(false);
   const [liveTelemetry, setLiveTelemetry] = useState<LiveTelemetry>({});
-  const [copiedBullet, setCopiedBullet] = useState<number | null>(null);
   const [isCustomPaperModalOpen, setIsCustomPaperModalOpen] = useState(false);
   const [customPaperUrl, setCustomPaperUrl] = useState('');
   const [customPaperTitle, setCustomPaperTitle] = useState('');
@@ -677,7 +676,7 @@ export default function App() {
             <div className="p-4 border-b border-[#e5e3db] flex justify-between items-center bg-[#f9f8f6]">
               <div className="flex items-center gap-2">
                 <BarChart2 className="w-5 h-5 text-emerald-600" />
-                <h3 className="font-semibold text-lg text-[#2c2c2a] font-serif">System Performance & Resume Metrics</h3>
+                <h3 className="font-semibold text-lg text-[#2c2c2a] font-serif">System Performance & Benchmark Metrics</h3>
               </div>
               <button 
                 onClick={() => setIsMetricsModalOpen(false)}
@@ -813,39 +812,6 @@ export default function App() {
                   </div>
                 </div>
               </div>
-
-              {/* Resume Bullet Generator */}
-              <div className="space-y-3">
-                <div className="flex justify-between items-center">
-                  <h4 className="text-xs font-bold text-[#5c5c5a] uppercase tracking-wider">
-                    Resume Bullet Points (Ready to Copy)
-                  </h4>
-                  <span className="text-[11px] text-[#7a7a78]">Click to copy any bullet</span>
-                </div>
-                <div className="space-y-2">
-                  {(benchmarkData?.recommendedResumeBullets || [
-                    "Engineered real-time Multimodal RAG with SQLite FTS5 BM25 search, delivering P50 retrieval latency of 1.7ms and P95 latency of 3.5ms.",
-                    "Integrated low-latency Gemini Live audio WebSocket tool-calling (TTFA <600ms, Barge-in <50ms), streaming voice responses directly from full-paper sections.",
-                    "Cut LLM input token consumption by 98.5% (68.8x token efficiency) compared to naive full-context stuffing by implementing targeted on-demand function retrieval.",
-                    "Achieved Retrieval Evidence Recall@3 of 53.3% and MRR of 0.44 on scientific research literature question answering."
-                  ]).map((bullet: string, idx: number) => (
-                    <div 
-                      key={idx}
-                      onClick={() => {
-                        navigator.clipboard.writeText(bullet);
-                        setCopiedBullet(idx);
-                        setTimeout(() => setCopiedBullet(null), 2000);
-                      }}
-                      className="p-3 bg-white hover:bg-emerald-50/50 border border-[#e5e3db] hover:border-emerald-300 rounded-lg text-xs text-[#2c2c2a] cursor-pointer transition-all flex justify-between items-start gap-3 group"
-                    >
-                      <span>{bullet}</span>
-                      <button className="text-[#7a7a78] group-hover:text-emerald-700 shrink-0 mt-0.5">
-                        {copiedBullet === idx ? <Check className="w-4 h-4 text-emerald-600" /> : <Copy className="w-4 h-4" />}
-                      </button>
-                    </div>
-                  ))}
-                </div>
-              </div>
             </div>
 
             <div className="p-4 border-t border-[#e5e3db] bg-[#f9f8f6] flex justify-end">
@@ -877,7 +843,7 @@ export default function App() {
           <button
             onClick={handleOpenBenchmark}
             className="flex items-center gap-1.5 px-3 py-1.5 bg-[#f0eee6] hover:bg-[#e5e3db] text-[#3a3a38] text-xs font-semibold rounded border border-[#d5d3cb] transition-colors"
-            title="View RAG & Voice Latency Benchmarks, Recall@K, and Resume Bullets"
+            title="View RAG & Voice Latency Benchmarks, Recall@K, and System Telemetry"
           >
             <BarChart2 className="w-4 h-4 text-emerald-700" />
             <span>System Benchmarks & Metrics</span>
