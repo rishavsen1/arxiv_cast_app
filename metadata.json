@@ -1,5 +1,6 @@
 {
   "name": "ArxivCast",
-  "description": "Intelligence Briefing with arXiv papers and AI-generated podcasts.",
-  "requestFramePermissions": ["microphone"]
+  "description": "Intelligence Briefing with arXiv papers, AI-generated podcasts, and real-time Live Voice Agent with full-paper RAG.",
+  "requestFramePermissions": ["microphone"],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
 }

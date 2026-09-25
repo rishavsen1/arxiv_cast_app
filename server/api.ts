@@ -1,6 +1,8 @@
 import { Router } from 'express';
-import { clearPapers, getPapers, getPapersByIds } from './db.js';
+import { clearPapers, getPapers, getPapersByIds, getPaperById, insertPaper, isPaperIndexed, savePaperChunks, searchPaperChunks, getIndexedPaperStatus } from './db.js';
 import { fetchFromArxiv } from './arxiv.js';
+import { fetchAndChunkPaper } from './paperFetcher.js';
+import { runSystemBenchmark } from './evalBench.js';
 import fs from 'fs';
 import path from 'path';
 
@@ -64,6 +66,25 @@ router.post('/arxiv/fetch', async (req, res) => {
   }
 });
 
+router.post('/arxiv/custom', (req, res) => {
+  const { title, abstract, url, category } = req.body;
+  try {
+    const paper = {
+      id: `custom-${Date.now()}`,
+      category: category || 'Custom',
+      title,
+      url: url || '',
+      date: new Date().toISOString().split('T')[0],
+      abstract,
+      other_categories: ''
+    };
+    const added = insertPaper(paper);
+    res.json({ ok: true, added: added > 0, paper });
+  } catch (error) {
+    res.status(500).json({ ok: false, error: String(error) });
+  }
+});
+
 router.post('/arxiv/papers', (req, res) => {
   const { paper_ids, date } = req.body;
   try {
@@ -76,6 +97,94 @@ router.post('/arxiv/papers', (req, res) => {
     res.json({ ok: true, papers });
   } catch (error) {
     res.status(500).json({ ok: false, error: String(error) });
+  }
+});
+
+router.post('/arxiv/ingest', async (req, res) => {
+  const { paper_ids } = req.body;
+  if (!paper_ids || !Array.isArray(paper_ids) || paper_ids.length === 0) {
+    return res.status(400).json({ ok: false, error: 'paper_ids must be a non-empty array' });
+  }
+
+  const results: Record<string, any> = {};
+  for (const id of paper_ids) {
+    try {
+      if (isPaperIndexed(id)) {
+        const status = getIndexedPaperStatus([id])[id];
+        results[id] = { indexed: true, total_chunks: status.total_chunks, source: status.source };
+        continue;
+      }
+
+      const paperRecord = getPaperById(id);
+      const title = paperRecord?.title || id;
+      const abstract = paperRecord?.abstract || '';
+
+      const ingested = await fetchAndChunkPaper(id, title, abstract);
+      savePaperChunks(id, title, ingested.chunks, ingested.source);
+
+      results[id] = {
+        indexed: true,
+        total_chunks: ingested.chunks.length,
+        source: ingested.source
+      };
+    } catch (err: any) {
+      console.error(`Error ingesting paper ${id}:`, err);
+      results[id] = { indexed: false, error: err.message };
+    }
+  }
+
+  res.json({ ok: true, results });
+});
+
+router.post('/arxiv/rag-search', async (req, res) => {
+  const { query, paper_ids, top_k } = req.body;
+  if (!query || typeof query !== 'string') {
+    return res.status(400).json({ ok: false, error: 'query parameter is required' });
+  }
+
+  try {
+    // If specific paper_ids provided, auto-ingest any that haven't been indexed yet
+    if (paper_ids && Array.isArray(paper_ids)) {
+      for (const id of paper_ids) {
+        if (!isPaperIndexed(id)) {
+          const paperRecord = getPaperById(id);
+          if (paperRecord) {
+            const ingested = await fetchAndChunkPaper(id, paperRecord.title, paperRecord.abstract);
+            savePaperChunks(id, paperRecord.title, ingested.chunks, ingested.source);
+          }
+        }
+      }
+    }
+
+    const chunks = searchPaperChunks(query, paper_ids, top_k || 5);
+    res.json({ ok: true, results: chunks });
+  } catch (err: any) {
+    console.error('RAG search error:', err);
+    res.status(500).json({ ok: false, error: err.message });
+  }
+});
+
+router.post('/arxiv/index-status', (req, res) => {
+  const { paper_ids } = req.body;
+  const status = getIndexedPaperStatus(paper_ids || []);
+  res.json({ ok: true, status });
+});
+
+router.get('/metrics/benchmark', async (req, res) => {
+  try {
+    const results = await runSystemBenchmark();
+    res.json({ ok: true, benchmark: results });
+  } catch (error: any) {
+    res.status(500).json({ ok: false, error: error.message });
+  }
+});
+
+router.post('/metrics/benchmark', async (req, res) => {
+  try {
+    const results = await runSystemBenchmark();
+    res.json({ ok: true, benchmark: results });
+  } catch (error: any) {
+    res.status(500).json({ ok: false, error: error.message });
   }
 });
 

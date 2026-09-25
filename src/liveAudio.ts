@@ -1,4 +1,11 @@
-import { GoogleGenAI, LiveServerMessage, Modality } from "@google/genai";
+import { GoogleGenAI, LiveServerMessage, Modality, Type } from "@google/genai";
+
+export interface LiveTelemetry {
+  ttfaMs?: number;
+  lastToolLatencyMs?: number;
+  bargeInStopMs?: number;
+  totalAudioChunksReceived?: number;
+}
 
 export class LiveAudioSession {
   private ai: GoogleGenAI;
@@ -11,16 +18,25 @@ export class LiveAudioSession {
   private activeSources: AudioBufferSourceNode[] = [];
   private animationFrameId: number = 0;
 
+  // Latency & performance telemetry tracking
+  private lastUserSpeechTimestamp: number = 0;
+  private awaitingFirstAudio: boolean = false;
+  private toolCallStartTime: number = 0;
+  private totalAudioChunks: number = 0;
+
   constructor(
     private papersContext: string, 
     private onStatusChange: (status: string) => void,
-    private onVolumeChange?: (volume: number) => void
+    private onVolumeChange?: (volume: number) => void,
+    private paperIds: string[] = [],
+    private onToolCall?: (toolName: string, query: string, status: 'searching' | 'completed') => void,
+    private onTelemetry?: (telemetry: LiveTelemetry) => void
   ) {
     this.ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
   }
 
   async start() {
-    this.onStatusChange('Connecting...');
+    this.onStatusChange('Connecting to Live Voice with Full-Paper RAG...');
     this.audioContext = new AudioContext({ sampleRate: 16000 });
     this.analyser = this.audioContext.createAnalyser();
     this.analyser.fftSize = 256;
@@ -28,19 +44,26 @@ export class LiveAudioSession {
     this.nextPlayTime = this.audioContext.currentTime;
     this.startVisualizer();
 
+    this.lastUserSpeechTimestamp = performance.now();
+    this.awaitingFirstAudio = true;
+
     this.sessionPromise = this.ai.live.connect({
-      model: "gemini-2.5-flash-native-audio-preview-09-2025",
+      model: "gemini-3.8-live",
       callbacks: {
         onopen: async () => {
           this.onStatusChange('Connected. Speak now!');
           await this.startMicrophone();
-          // Send an initial message to prompt the model to speak
+          // Send an initial message to prompt the model to speak and acknowledge papers & RAG capabilities
           if (this.sessionPromise) {
             this.sessionPromise.then(session => {
+              this.lastUserSpeechTimestamp = performance.now();
+              this.awaitingFirstAudio = true;
               session.sendClientContent({
                 turns: [{
                   role: 'user',
-                  parts: [{ text: 'Hello! Please introduce yourself and briefly summarize the papers we are discussing today in 1-2 sentences, then ask me what I would like to know.' }]
+                  parts: [{ 
+                    text: 'Hello! Please introduce yourself as the ArxivCast research partner. Briefly summarize the paper(s) we are discussing in 1-2 conversational sentences, mention that you have full-text lookup capabilities for deep math, methodology, and experimental details, and ask what I would like to explore.' 
+                  }]
                 }]
               });
             });
@@ -64,9 +87,70 @@ export class LiveAudioSession {
         speechConfig: {
           voiceConfig: { prebuiltVoiceConfig: { voiceName: "Puck" } },
         },
-        systemInstruction: `You are an expert research assistant. The user wants to discuss the following selected arXiv papers. Use this context to answer their questions accurately. Keep your answers concise and conversational.\n\nContext Papers:\n${this.papersContext}`,
+        systemInstruction: `You are an expert AI research scientist and conversational co-pilot.
+You are discussing selected academic research papers with a fellow researcher.
+You are equipped with a real-time Retrieval-Augmented Generation (RAG) tool: 'lookupPaperDetails'.
+
+IMPORTANT INSTRUCTIONS ON FULL-PAPER RAG:
+1. High-level questions: Answer naturally using your broad knowledge and the paper titles/abstracts below.
+2. In-depth technical questions: Whenever the user asks about specific mathematical formulations, loss functions, neural network architectures, hyperparameter values, ablation studies, benchmark tables, datasets, proofs, or experimental setups, you MUST call 'lookupPaperDetails' with a targeted search query.
+3. When the tool returns excerpts from the full paper, synthesize and explain the findings conversationally, concisely, and accurately.
+4. Keep spoken responses fluid, engaging, and spoken-word friendly.
+
+Selected Papers Overview:
+${this.papersContext}`,
+        tools: [
+          {
+            functionDeclarations: [
+              {
+                name: "lookupPaperDetails",
+                description: "Search the complete text, methodology, equations, architecture, benchmarks, hyperparameters, tables, and experimental details of the selected arXiv papers.",
+                parameters: {
+                  type: Type.OBJECT,
+                  properties: {
+                    query: {
+                      type: Type.STRING,
+                      description: "The specific topic, concept, equation, metric, or technical parameter to search for in the full paper text.",
+                    },
+                    paper_id: {
+                      type: Type.STRING,
+                      description: "Optional arXiv paper ID if inquiring about a specific paper.",
+                    }
+                  },
+                  required: ["query"],
+                }
+              }
+            ]
+          }
+        ]
       },
     });
+  }
+
+  private async queryPaperRAG(query: string, paperId?: string): Promise<string> {
+    try {
+      const res = await fetch('/api/arxiv/rag-search', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          query,
+          paper_ids: paperId ? [paperId] : (this.paperIds.length > 0 ? this.paperIds : undefined),
+          top_k: 4,
+        }),
+      });
+
+      const data = await res.json();
+      if (!data.ok || !data.results || data.results.length === 0) {
+        return "No specific full-text excerpts found matching this query in the selected papers.";
+      }
+
+      return data.results
+        .map((r: any, idx: number) => `[Excerpt ${idx + 1} - Paper: ${r.title} | Section: ${r.section}]\n${r.content}`)
+        .join('\n\n');
+    } catch (err: any) {
+      console.error("RAG search error:", err);
+      return `Error searching paper: ${err.message}`;
+    }
   }
 
   private async startMicrophone() {
@@ -82,9 +166,17 @@ export class LiveAudioSession {
       this.processor.onaudioprocess = (e) => {
         const float32Data = e.inputBuffer.getChannelData(0);
         const pcm16Data = new Int16Array(float32Data.length);
+        let hasVoiceActivity = false;
+
         for (let i = 0; i < float32Data.length; i++) {
           let s = Math.max(-1, Math.min(1, float32Data[i]));
           pcm16Data[i] = s < 0 ? s * 0x8000 : s * 0x7FFF;
+          if (Math.abs(s) > 0.08) hasVoiceActivity = true;
+        }
+
+        if (hasVoiceActivity) {
+          this.lastUserSpeechTimestamp = performance.now();
+          this.awaitingFirstAudio = true;
         }
         
         // Fast base64 encoding
@@ -98,7 +190,7 @@ export class LiveAudioSession {
         if (this.sessionPromise) {
           this.sessionPromise.then(session => {
             session.sendRealtimeInput({
-              media: { data: base64, mimeType: 'audio/pcm;rate=16000' }
+              audio: { data: base64, mimeType: 'audio/pcm;rate=16000' }
             });
           });
         }
@@ -110,16 +202,63 @@ export class LiveAudioSession {
   }
 
   private handleServerMessage(message: LiveServerMessage) {
+    // Interruption / Barge-in
     if (message.serverContent?.interrupted) {
+      const interruptStart = performance.now();
       this.nextPlayTime = this.audioContext?.currentTime || 0;
       this.activeSources.forEach(source => {
         try { source.stop(); } catch (e) {}
       });
       this.activeSources = [];
+      const bargeInStopMs = Math.round(performance.now() - interruptStart);
+      this.onTelemetry?.({ bargeInStopMs });
+    }
+
+    // Handle Function Calling (RAG Tool)
+    if (message.toolCall?.functionCalls) {
+      for (const call of message.toolCall.functionCalls) {
+        if (call.name === 'lookupPaperDetails') {
+          const args = (call.args || {}) as { query?: string; paper_id?: string };
+          const searchQuery = args.query || '';
+          this.toolCallStartTime = performance.now();
+          this.onToolCall?.('lookupPaperDetails', searchQuery, 'searching');
+
+          this.queryPaperRAG(searchQuery, args.paper_id).then(searchResult => {
+            const lastToolLatencyMs = Math.round(performance.now() - this.toolCallStartTime);
+            this.onToolCall?.('lookupPaperDetails', searchQuery, 'completed');
+            this.onTelemetry?.({ lastToolLatencyMs });
+
+            if (this.sessionPromise) {
+              this.sessionPromise.then(session => {
+                session.sendToolResponse({
+                  functionResponses: [
+                    {
+                      id: call.id,
+                      name: call.name,
+                      response: {
+                        output: searchResult,
+                      },
+                    },
+                  ],
+                });
+              });
+            }
+          });
+        }
+      }
     }
 
     const base64Audio = message.serverContent?.modelTurn?.parts?.[0]?.inlineData?.data;
     if (base64Audio && this.audioContext) {
+      this.totalAudioChunks++;
+
+      // Compute TTFA (Time to First Audio packet)
+      if (this.awaitingFirstAudio && this.lastUserSpeechTimestamp > 0) {
+        const ttfaMs = Math.round(performance.now() - this.lastUserSpeechTimestamp);
+        this.awaitingFirstAudio = false;
+        this.onTelemetry?.({ ttfaMs, totalAudioChunksReceived: this.totalAudioChunks });
+      }
+
       const binaryString = atob(base64Audio);
       const bytes = new Uint8Array(binaryString.length);
       for (let i = 0; i < binaryString.length; i++) {

@@ -24,7 +24,7 @@ ${papersText}
   `;
 
   const response = await ai.models.generateContent({
-    model: 'gemini-3.1-pro-preview',
+    model: 'gemini-3.8-flash',
     contents: prompt,
     config: {
       systemInstruction: "You are an expert podcast script writer. Write engaging, conversational dialogue.",
@@ -36,8 +36,13 @@ ${papersText}
 
 export async function generatePodcastAudio(script: string) {
   const response = await ai.models.generateContent({
-    model: "gemini-2.5-flash-preview-tts",
-    contents: [{ parts: [{ text: script }] }],
+    model: "gemini-3.8-flash-tts",
+    contents: [
+      {
+        role: "user",
+        parts: [{ text: script }],
+      }
+    ],
     config: {
       responseModalities: ['AUDIO'],
       speechConfig: {
