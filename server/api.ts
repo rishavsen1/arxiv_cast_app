@@ -3,6 +3,7 @@ import { clearPapers, getPapers, getPapersByIds, getPaperById, insertPaper, isPa
 import { fetchFromArxiv } from './arxiv.js';
 import { fetchAndChunkPaper } from './paperFetcher.js';
 import { runSystemBenchmark } from './evalBench.js';
+import { getFullQasperSuite } from './qasperEval.js';
 import fs from 'fs';
 import path from 'path';
 
@@ -183,6 +184,24 @@ router.post('/metrics/benchmark', async (req, res) => {
   try {
     const results = await runSystemBenchmark();
     res.json({ ok: true, benchmark: results });
+  } catch (error: any) {
+    res.status(500).json({ ok: false, error: error.message });
+  }
+});
+
+router.get('/metrics/qasper', (req, res) => {
+  try {
+    const suite = getFullQasperSuite();
+    res.json({ ok: true, qasper: suite });
+  } catch (error: any) {
+    res.status(500).json({ ok: false, error: error.message });
+  }
+});
+
+router.post('/metrics/qasper', (req, res) => {
+  try {
+    const suite = getFullQasperSuite();
+    res.json({ ok: true, qasper: suite });
   } catch (error: any) {
     res.status(500).json({ ok: false, error: error.message });
   }
